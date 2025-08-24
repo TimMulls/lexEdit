@@ -37,3 +37,9 @@ https://agentzmarketing.com//DesktopModules/EditorServices/API/LexEditor/GetOrde
 
 Call
 https://agentzmarketing.com//DesktopModules/EditorServices/API/LexEditor/GetOrderData?orderNumber=292813&userId=0&sessionId=c2sezknxivfmtjg0tt4uqxro
+
+
+
+git remote add origin git@github.com:TimMulls/lexEdit.git
+git branch -M main
+git push -u origin main

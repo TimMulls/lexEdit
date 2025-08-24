@@ -1,25 +1,51 @@
 <template>
   <div class="w-full overflow-visible" ref="rootRef">
     <div class="flex items-center gap-3 px-4 h-12 bg-white border-b border-gray-200 text-sm relative">
-      <div class="flex items-center gap-2">
-        <button class="text-xs font-medium px-2 py-1 border rounded bg-white hover:bg-gray-50" @click="openSidebar">Edit</button>
-      </div>
       <!-- font family -->
-      <div v-if="props.capabilities?.canFont" class="flex items-center gap-2 ml-2">
-        <label class="text-xs text-gray-500">Font</label>
-        <div class="flex items-center gap-2">
-          <input type="text" v-model="fontSearch" placeholder="Search fonts..." class="text-xs border rounded px-2 py-1" />
-          <select v-model="fontFamily" class="text-xs border rounded px-2 py-1">
-            <option v-for="f in filteredFonts" :key="f" :value="f" :style="{ fontFamily: f, fontSize: '12pt' }">
-              {{ f }}
-            </option>
-          </select>
+      <div v-if="props.capabilities?.canFont" class="flex items-center gap-2 ml-2 relative">
+        <div class="flex items-center gap-2 relative">
+          <!-- Trigger button that shows current family in its own face -->
+          <button class="text-xs border rounded px-2 py-1 flex items-center gap-2 bg-white" @click="toggleFontDropdown" :aria-expanded="showFontDropdown">
+            <span :style="{ fontFamily: fontFamily, fontSize: '12pt' }">{{ fontFamily }}</span>
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <path d="M7 10l5 5 5-5H7z" fill="currentColor" />
+            </svg>
+          </button>
+
+          <!-- Dropdown panel: only rendered when open. Contains the search box + options list -->
+          <div v-if="showFontDropdown" class="absolute left-0 top-10 bg-white border rounded p-2 shadow z-50 w-64">
+            <input
+              ref="fontSearchInput"
+              type="search"
+              v-model="fontSearch"
+              :name="'fontSearch_' + fontSearchUid"
+              autocomplete="off"
+              spellcheck="false"
+              autocorrect="off"
+              autocapitalize="off"
+              :readonly="fontSearchReadonly"
+              placeholder="Search fonts..."
+              class="text-xs border rounded px-2 py-1 w-full mb-2"
+              @focus="onFontSearchFocus"
+              @keydown.esc="showFontDropdown = false" />
+            <div ref="fontsListRef" class="max-h-60 overflow-auto" @keydown.stop>
+              <button
+                v-for="(f, idx) in filteredFonts"
+                :key="f"
+                @click="selectFont(f)"
+                :class="['w-full text-left px-2 py-1 text-xs', idx === activeIndex ? 'bg-gray-200' : 'hover:bg-gray-100']"
+                :style="{ fontFamily: f, fontSize: '12pt' }"
+                role="option"
+                :aria-selected="idx === activeIndex">
+                {{ f }}
+              </button>
+            </div>
+          </div>
         </div>
       </div>
 
       <!-- font size -->
       <div v-if="props.capabilities?.canSize" class="flex items-center gap-2 ml-2">
-        <label class="text-xs text-gray-500">Size</label>
         <input type="number" v-model.number="fontSize" class="w-20 text-xs border rounded px-2 py-1" />
       </div>
 
@@ -254,6 +280,12 @@ const showBg = ref(false)
 const showArrange = ref(false)
 const showOpacity = ref(false)
 const rootRef = ref<HTMLElement | null>(null)
+const showFontDropdown = ref(false)
+const fontSearchInput = ref<HTMLInputElement | null>(null)
+const fontSearchUid = Math.random().toString(36).slice(2, 9)
+const fontSearchReadonly = ref(true)
+const fontsListRef = ref<HTMLElement | null>(null)
+const activeIndex = ref<number>(-1)
 // Debounce timers to avoid flooding updates when dragging color pickers
 const fillTimer = ref<number | null>(null)
 const bgTimer = ref<number | null>(null)
@@ -287,6 +319,8 @@ function onDocumentClick(e: MouseEvent) {
   if (!(e.target instanceof Node)) return
   if (!root.contains(e.target)) {
     closeAllPopovers()
+    // also close font dropdown if open
+    showFontDropdown.value = false
   }
 }
 
@@ -414,6 +448,86 @@ function stopEyeDropper() {
       eyeDropperKeyHandler = null
     }
   } catch (e) {}
+}
+
+function toggleFontDropdown() {
+  showFontDropdown.value = !showFontDropdown.value
+  if (!showFontDropdown.value) {
+    // clear search when closing
+    fontSearch.value = ""
+  }
+  if (showFontDropdown.value) {
+    // prepare input readonly->focus trick to avoid autofill
+    fontSearchReadonly.value = true
+    nextTick(() => {
+      try {
+        // briefly clear readonly and focus
+        if (fontSearchInput.value) {
+          fontSearchReadonly.value = false
+          fontSearchInput.value.focus()
+        }
+        // set active index to first item when opening
+        activeIndex.value = filteredFonts.value.length > 0 ? 0 : -1
+        // ensure focused item visible when opened
+        nextTick(() => {
+          scrollActiveIntoView()
+        })
+      } catch (e) {}
+    })
+  }
+}
+
+function selectFont(f: string) {
+  // set local value and close panel; watch on fontFamily will trigger loader + emit
+  fontFamily.value = f
+  showFontDropdown.value = false
+  fontSearch.value = ""
+}
+
+function onFontSearchFocus() {
+  // When the element receives focus, remove readonly to allow typing. This trick helps avoid many browser autofill heuristics.
+  fontSearchReadonly.value = false
+}
+
+function scrollActiveIntoView() {
+  try {
+    const list = fontsListRef.value
+    if (!list) return
+    const idx = activeIndex.value
+    if (idx < 0) return
+    const btn = list.querySelectorAll("button")[idx] as HTMLElement | undefined
+    if (btn) btn.scrollIntoView({ block: "nearest" })
+  } catch (e) {}
+}
+
+function onKeyDownFromList(e: KeyboardEvent) {
+  if (!showFontDropdown.value) return
+  const count = filteredFonts.value.length
+  if (e.key === "ArrowDown") {
+    e.preventDefault()
+    activeIndex.value = Math.min(count - 1, Math.max(0, activeIndex.value + 1))
+    scrollActiveIntoView()
+    return
+  }
+  if (e.key === "ArrowUp") {
+    e.preventDefault()
+    activeIndex.value = Math.max(0, activeIndex.value - 1)
+    scrollActiveIntoView()
+    return
+  }
+  if (e.key === "Enter") {
+    e.preventDefault()
+    const idx = activeIndex.value
+    if (idx >= 0 && idx < filteredFonts.value.length) {
+      const v = filteredFonts.value[idx]
+      if (v) selectFont(v)
+    }
+    return
+  }
+  if (e.key === "Escape") {
+    showFontDropdown.value = false
+    return
+  }
 }
 
 // Debounced opacity updates while sliding
