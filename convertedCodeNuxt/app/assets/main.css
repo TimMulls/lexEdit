@@ -1,0 +1,6 @@
+@import 'tailwindcss';
+
+canvas {
+  box-sizing: content-box !important;
+  font-family: sans-serif !important;
+}

@@ -1,0 +1,66 @@
+# Node modules and package manager files
+node_modules/
+.pnpm-store/
+
+# Build output
+dist/
+.nuxt/
+.output/
+build/
+
+# Local env files
+.env
+.env.*.local
+.env.local
+
+# Logs
+npm-debug.log*
+pnpm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+*.log
+
+# OS / editor files
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+*.suo
+*.ntvs*
+*.njsproj.user
+
+# Misc
+coverage/
+.cache/
+public/ASRWebData/fonts/
+
+# Keys and certs
+*.pem
+*.key
+
+# Ignore node lockfile? (you can remove this if you prefer to commit it)
+# pnpm-lock.yaml
+
+# Generated files
+dist/
+**/dist/
+
+# Mac files
+.AppleDouble
+.LSOverride
+
+# Temporary
+tmp/
+temp/
+
+# JetBrains
+*.iml
+
+# Composer/packagist
+vendor/
+
+# Ignore build artifacts
+*.tgz
+
+# VS Code history
+.history/
