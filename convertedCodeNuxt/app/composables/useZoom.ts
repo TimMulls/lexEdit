@@ -46,7 +46,7 @@ export function useZoom(canvasRef: { value: Canvas | null }, containerId = "canv
         containerClientWidth: document.getElementById(containerId)?.clientWidth,
         containerClientHeight: document.getElementById(containerId)?.clientHeight,
       }
-      console.debug("[setCanvasZoom] pre", pre)
+
       try {
         const containerEl = document.getElementById(containerId) as HTMLElement | null
         const computed = containerEl ? window.getComputedStyle(containerEl) : null
@@ -63,10 +63,7 @@ export function useZoom(canvasRef: { value: Canvas | null }, containerId = "canv
           windowInner: { w: window.innerWidth, h: window.innerHeight },
           stack: new Error("stack").stack?.split("\n").slice(1, 6),
         }
-        console.debug("[setCanvasZoom] pre.extra", debugExtra)
-      } catch (e) {
-        console.debug("[setCanvasZoom] pre.extra failed", e)
-      }
+      } catch (e) {}
     } catch (e) {
       console.debug("[setCanvasZoom] pre: failed to read sizes", e)
     }
@@ -77,14 +74,10 @@ export function useZoom(canvasRef: { value: Canvas | null }, containerId = "canv
         const currentScale = canvasScale.value || 1
         baseCanvasWidth = canvasRef.value.getWidth() / currentScale
         baseCanvasHeight = canvasRef.value.getHeight() / currentScale
-        console.debug("[setCanvasZoom] initialized baseCanvasSize", { baseCanvasWidth, baseCanvasHeight, currentScale })
       } catch (e) {
         console.debug("[setCanvasZoom] failed to initialize baseCanvasSize", e)
       }
     }
-
-    // Always log the base canvas size for diagnosis
-    console.debug("[setCanvasZoom] baseCanvas", { baseCanvasWidth, baseCanvasHeight })
 
     // Get Unzoomed height/width (based on current scale)
     const baseWidth = baseCanvasWidth ?? canvasRef.value.getWidth() / (canvasScale.value || 1)
@@ -113,10 +106,10 @@ export function useZoom(canvasRef: { value: Canvas | null }, containerId = "canv
         containerClientWidth: document.getElementById(containerId)?.clientWidth,
         containerClientHeight: document.getElementById(containerId)?.clientHeight,
       }
-      console.debug("[setCanvasZoom] post", post)
+
       try {
         const rect = document.getElementById(containerId)?.getBoundingClientRect()
-        if (rect) console.debug("[setCanvasZoom] container rect", rect)
+        // if (rect) console.debug("[setCanvasZoom] container rect", rect)
         try {
           const containerEl = document.getElementById(containerId) as HTMLElement | null
           const computed = containerEl ? window.getComputedStyle(containerEl) : null
@@ -133,7 +126,6 @@ export function useZoom(canvasRef: { value: Canvas | null }, containerId = "canv
             windowInner: { w: window.innerWidth, h: window.innerHeight },
             stack: new Error("stack").stack?.split("\n").slice(1, 6),
           }
-          console.debug("[setCanvasZoom] post.extra", debugExtra)
         } catch (e) {
           console.debug("[setCanvasZoom] post.extra failed", e)
         }
@@ -198,7 +190,7 @@ export function useZoom(canvasRef: { value: Canvas | null }, containerId = "canv
     // then apply one setCanvasZoom. This avoids intermediate display toggles and layout feedback loops.
     if (!canvasRef.value) return
     if (zoomFitRunning) {
-      console.debug("[zoomFit] already running, ignoring re-entry")
+      // console.debug("[zoomFit] already running, ignoring re-entry")
       return
     }
     // Prevent very-rapid repeated zoomFit calls from cascading small layout-driven changes.
@@ -252,11 +244,11 @@ export function useZoom(canvasRef: { value: Canvas | null }, containerId = "canv
       const WINDOW_MS = 5000
       if (lastMax && nowMs - lastMax.t < WINDOW_MS) {
         if (lastMax.w > availW) {
-          console.debug("[zoomFit] using recent max availW to avoid shrink", { availW, lastMaxW: lastMax.w })
+          // console.debug("[zoomFit] using recent max availW to avoid shrink", { availW, lastMaxW: lastMax.w })
           availW = Math.max(availW, lastMax.w)
         }
         if (lastMax.h > availH) {
-          console.debug("[zoomFit] using recent max availH to avoid shrink", { availH, lastMaxH: lastMax.h })
+          // console.debug("[zoomFit] using recent max availH to avoid shrink", { availH, lastMaxH: lastMax.h })
           availH = Math.max(availH, lastMax.h)
         }
       }
@@ -274,7 +266,7 @@ export function useZoom(canvasRef: { value: Canvas | null }, containerId = "canv
     target = Math.max(0.1, Math.min(2, target))
     target = Math.round(target * 1000) / 1000
 
-    console.debug("[zoomFit] single-pass target", { baseWidth, baseHeight, availW, availH, scaleW, scaleH, target })
+    // console.debug("[zoomFit] single-pass target", { baseWidth, baseHeight, availW, availH, scaleW, scaleH, target })
 
     // If target is very close to current, skip to avoid unnecessary reflows and prevent
     // repeated tiny shrinkage when layout measurements jitter between runs.
@@ -283,12 +275,12 @@ export function useZoom(canvasRef: { value: Canvas | null }, containerId = "canv
     // If caller requested resetZoom (the default from UI), force apply even for small changes.
     if (!resetZoom) {
       if (Math.abs(currentScale - target) < ABS_TOLERANCE) {
-        console.debug("[zoomFit] change below tolerance, skipping apply", { current: currentScale, target, ABS_TOLERANCE })
+        // console.debug("[zoomFit] change below tolerance, skipping apply", { current: currentScale, target, ABS_TOLERANCE })
         zoomFitRunning = false
         return
       }
     } else {
-      console.debug("[zoomFit] resetZoom requested — forcing apply", { current: currentScale, target })
+      // console.debug("[zoomFit] resetZoom requested — forcing apply", { current: currentScale, target })
     }
 
     // Determine desired container display without relying on setCanvasDisplay's measurement

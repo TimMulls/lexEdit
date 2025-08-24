@@ -151,7 +151,7 @@ export function createCustomImage(url: string, opts: Opts = {}): Promise<any> {
 
         imgObj.setCoords && imgObj.setCoords()
 
-        console.debug("[createCustomImage] created image", { left: imgObj.left, top: imgObj.top, width: imgObj.width, height: imgObj.height })
+        // console.debug("[createCustomImage] created image", { left: imgObj.left, top: imgObj.top, width: imgObj.width, height: imgObj.height })
         resolve(imgObj)
       } catch (err) {
         reject(err)

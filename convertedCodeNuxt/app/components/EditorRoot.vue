@@ -66,7 +66,6 @@
                     <input
                       :id="'sidebar_text_' + String(field.id || field.ID || field.objectId || '')"
                       v-model="field.value"
-                      ref="(el) => { /* ref will be used to focus when selected */ }"
                       class="ml-2 border border-gray-300 rounded px-1.5 py-0.5 text-xs w-28 focus:ring-2 focus:ring-primary-400"
                       @focus="onSidebarFieldFocus(field)"
                       @click.stop="onSidebarFieldFocus(field)" />
@@ -269,7 +268,12 @@
         <div class="flex-1 flex justify-center items-start bg-white p-0 min-h-0 min-w-0 overflow-auto border border-gray-400 rounded-b shadow-inner">
           <div class="w-full max-w-5xl mx-auto">
             <EditorCanvas ref="canvasComponent" :canvasWidth="editorData.canvasSize.value.width" :canvasHeight="editorData.canvasSize.value.height" />
-            <ImageManager v-if="showImageManager" @close="showImageManager = false" @select-image="onImageSelected" />
+            <ImageManager
+              v-if="showImageManager"
+              :hasImageSelected="isImageSelectedComputed"
+              @close="showImageManager = false"
+              @select-image="onImageSelected"
+              @replace-image="onImageReplace" />
           </div>
         </div>
         <!-- Bottom Action Buttons -->
@@ -283,7 +287,7 @@
 </template>
 <script setup lang="ts">
 defineProps<{ ready: boolean }>()
-import { ref, watch, onMounted, nextTick } from "vue"
+import { ref, watch, onMounted, nextTick, computed } from "vue"
 import { fetchOrderVars } from "../composables/useOrderVars"
 import ElementPropBar from "./ElementPropBar.vue"
 import ImageManager from "./ImageManager.vue"
@@ -293,6 +297,53 @@ const editorData = useEditorData()
 const canvasComponent = ref<any>(null)
 const showShapeMenu = ref(false)
 const showImageManager = ref(false)
+const isImageSelected = ref(false)
+const isImageSelectedComputed = computed(() => {
+  try {
+    // Prefer the canonical selectedObjectId (set from canvas-selection-changed event)
+    const id = selectedObjectId.value
+    if (!id) return false
+    // Try to match id against editorData.images entries (covers groups and custom images)
+    try {
+      const match = (editorData.images.value || []).some((img: any) => {
+        const candidates = [img.id, img.ID, img.objectId, img.ImgID, img.CouponID, img.ObjectID]
+        for (const c of candidates) {
+          if (c !== undefined && c !== null && String(c) === String(id)) return true
+        }
+        // also match by url if available
+        if (img.url && String(img.url) === String(id)) return true
+        return false
+      })
+      if (match) return true
+    } catch (e) {}
+
+    // Fallback: query canvas active object (in case selection hasn't been mapped to sidebar yet)
+    try {
+      const act = canvasComponent.value?.getActiveObject?.()
+      if (!act) return false
+      const t = String(act.type || "").toLowerCase()
+      if (t.includes("image")) return true
+      const children = (act as any)._objects || (act as any).getObjects?.()
+      if (Array.isArray(children)) {
+        return children.some((c: any) => {
+          try {
+            const ct = String(c.type || "").toLowerCase()
+            if (ct.includes("image")) return true
+            if (typeof c.setSrc === "function") return true
+            return false
+          } catch (e) {
+            return false
+          }
+        })
+      }
+    } catch (e) {}
+    return false
+  } catch (e) {
+    return false
+  }
+})
+// pending action when Image Manager is opened from toolbar (force add/replace)
+const pendingImageAction = ref<null | "add" | "replace">(null)
 // expose component so template can use it
 const components = { ElementPropBar }
 const selectedLabel = ref<string | null>(null)
@@ -448,8 +499,9 @@ function onAddText() {
 }
 
 function onAddImage() {
-  const img = editorData.images.value?.[0]
-  if (img && canvasComponent.value?.addImage) canvasComponent.value.addImage(img.url || "")
+  // Open the Image Manager so user explicitly selects an image to add
+  pendingImageAction.value = "add"
+  showImageManager.value = true
 }
 
 function onAddShape(type?: string) {
@@ -486,24 +538,80 @@ function toggleShapeMenu() {
   showShapeMenu.value = !showShapeMenu.value
 }
 
-// Handle image selection from ImageManager
+// Handle image selection from ImageManager (either Add or Replace depending on context)
 function onImageSelected(payload: { id: any; url: string }) {
-  // If an object is selected and it's an image, replace it; otherwise add new if advMode
   try {
-    const selectedObj = canvasComponent.value?.getActiveObject?.()
-    const isImageSelected = selectedObj && selectedObj.type && selectedObj.type.toLowerCase().includes("image")
-    if (isImageSelected && typeof canvasComponent.value.replaceImage === "function") {
-      canvasComponent.value.replaceImage(selectedObj, payload.id, payload.url)
-    } else if ((advMode.value || advEditAllowed) && typeof canvasComponent.value.addImage === "function") {
-      canvasComponent.value.addImage(payload.url, { ImgID: payload.id })
+    // If a pending action is set (toolbar triggered), obey it
+    if (pendingImageAction.value === "add") {
+      if (typeof canvasComponent.value?.addImage === "function") {
+        // push to sidebar images if not present
+        try {
+          const faceKey = editorData.selectedFace.value
+          const facesRef: any = editorData.faces
+          if (!facesRef.value) facesRef.value = {}
+          if (!Array.isArray(facesRef.value[faceKey])) facesRef.value[faceKey] = []
+          // Avoid duplicates by url or id
+          const exists = facesRef.value[faceKey].some(
+            (it: any) => String(it.ID || it.id || it.ImgID || "") === String(payload.id || "") || String(it.__customUrl || it.Text || "") === String(payload.url)
+          )
+          if (!exists) {
+            facesRef.value[faceKey].push({ ResourceType: "I", ID: payload.id, __customUrl: payload.url, ObjectName: payload.id ? String(payload.id) : "Added Image" })
+          }
+        } catch (e) {
+          console.debug("failed to update editorData.faces", e)
+        }
+        canvasComponent.value.addImage(payload.url, { ImgID: payload.id })
+      }
     } else {
-      // not allowed
-      console.debug("[EditorRoot] image selection ignored (no adv mode or canvas handler)")
+      // no forced pending action — follow previous behavior: replace if image selected, otherwise add if allowed
+      const selectedObj = canvasComponent.value?.getActiveObject?.()
+      const selIsImage = selectedObj && selectedObj.type && String(selectedObj.type).toLowerCase().includes("image")
+      if (selIsImage && typeof canvasComponent.value.replaceImage === "function") {
+        canvasComponent.value.replaceImage(selectedObj, payload.id, payload.url)
+      } else if ((advMode.value || advEditAllowed) && typeof canvasComponent.value.addImage === "function") {
+        // update sidebar then add
+        try {
+          const faceKey = editorData.selectedFace.value
+          const facesRef: any = editorData.faces
+          if (!facesRef.value) facesRef.value = {}
+          if (!Array.isArray(facesRef.value[faceKey])) facesRef.value[faceKey] = []
+          const exists = facesRef.value[faceKey].some(
+            (it: any) => String(it.ID || it.id || it.ImgID || "") === String(payload.id || "") || String(it.__customUrl || it.Text || "") === String(payload.url)
+          )
+          if (!exists) {
+            facesRef.value[faceKey].push({ ResourceType: "I", ID: payload.id, __customUrl: payload.url, ObjectName: payload.id ? String(payload.id) : "Added Image" })
+          }
+        } catch (e) {}
+        canvasComponent.value.addImage(payload.url, { ImgID: payload.id })
+      } else {
+        console.debug("[EditorRoot] image selection ignored (no adv mode or canvas handler)")
+      }
     }
   } catch (e) {
     console.error("onImageSelected error", e)
+  } finally {
+    pendingImageAction.value = null
+    showImageManager.value = false
   }
-  showImageManager.value = false
+}
+
+// Handle explicit replace event from ImageManager (button replacement action)
+function onImageReplace(payload: { id: any; url: string; raw?: any }) {
+  try {
+    const selectedObj = canvasComponent.value?.getActiveObject?.()
+    const isImage = selectedObj && selectedObj.type && String(selectedObj.type).toLowerCase().includes("image")
+    if (isImage && typeof canvasComponent.value.replaceImage === "function") {
+      canvasComponent.value.replaceImage(selectedObj, payload.id, payload.url)
+    } else {
+      console.debug("onImageReplace: no image selected to replace")
+    }
+  } catch (e) {
+    console.error("onImageReplace error", e)
+  } finally {
+    // clear any pending action and close manager
+    pendingImageAction.value = null
+    showImageManager.value = false
+  }
 }
 
 function onSidebarFieldFocus(field: any) {

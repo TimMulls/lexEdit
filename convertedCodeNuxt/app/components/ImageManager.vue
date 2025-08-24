@@ -1,5 +1,5 @@
 <template>
-  <div class="absolute inset-0 z-30 bg-white border shadow-lg flex">
+  <div class="fixed inset-0 z-50 bg-white border shadow-lg flex pointer-events-auto">
     <div class="w-44 border-r p-2 bg-gray-50">
       <div class="font-bold mb-2 flex items-center gap-2"><i class="material-icons">image</i> My Images</div>
       <ul class="space-y-1 text-sm">
@@ -31,12 +31,28 @@
       <div v-if="loading" class="py-8 text-center text-sm text-gray-500">Loading images...</div>
 
       <div v-else class="mt-4 grid grid-cols-4 gap-3">
-        <div v-for="img in images" :key="img.ImgID || img.CouponID || img.ImgFull" class="border rounded overflow-hidden bg-white">
-          <img :src="img.ImgThumb || img.ImgFull || img.CouponThumb" class="w-full h-32 object-cover" />
+        <div
+          v-for="(img, idx) in images"
+          :key="img.ImgID || img.CouponID || img.ImgFull"
+          :ref="(el) => (imgRefs[idx] = el)"
+          :class="[
+            'border rounded overflow-hidden bg-white',
+            selectedInitialId && (img.ImgID || img.CouponID || img.ImgFull) == selectedInitialId ? 'ring-2 ring-primary-400' : '',
+          ]">
+          <div class="relative">
+            <img :src="makeFullUrl(img.ImgThumb || img.ImgFull || img.CouponThumb)" class="w-full h-32 object-cover" />
+            <span v-if="(img as any)._isDefault" class="absolute top-1 left-1 bg-yellow-200 text-xs text-yellow-800 px-1 py-0.5 rounded">Default</span>
+          </div>
           <div class="p-2 text-xs flex items-center justify-between">
             <div class="truncate pr-2">{{ (img.ImgName || img.CouponDescription || "").slice(0, 32) }}</div>
             <div class="flex items-center gap-1">
-              <button class="text-xs px-2 py-0.5 border rounded" @click="onSelect(img)">{{ selectLabel(img) }}</button>
+              <!-- If default, auxiliary Download button -->
+              <button v-if="(img as any)._isDefault" class="text-xs px-2 py-0.5 border rounded" @click="onDownload(img)">Download</button>
+
+              <!-- Main action: Replace when canvas has selection, otherwise Add -->
+              <button v-if="showReplace" class="text-xs px-2 py-0.5 border rounded bg-yellow-50" @click="onReplace(img)">Replace</button>
+              <button v-else class="text-xs px-2 py-0.5 border rounded" @click="onSelect(img)">{{ selectLabel(img) }}</button>
+
               <button v-if="canEdit(img)" class="text-xs px-2 py-0.5 border rounded" @click="onEdit(img)">Edit</button>
             </div>
           </div>
@@ -50,11 +66,11 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed } from "vue"
+import { ref, computed, watch, nextTick } from "vue"
 import { useLexAppConfig } from "../composables/useLexAppConfig"
 import { useOrderVars } from "../composables/useOrderVars"
 
-const emit = defineEmits(["close", "select-image"])
+const emit = defineEmits(["close", "select-image", "replace-image"])
 
 const types = [
   { key: "Artwork", label: "Design Photos" },
@@ -69,9 +85,34 @@ const types = [
 const appConfig = useLexAppConfig()
 const orderVars = useOrderVars()
 
+const props = defineProps<{ initialImage?: any; hasImageSelected?: boolean }>()
+
+const showReplace = computed(() => {
+  try {
+    return !!(props && (props as any).hasImageSelected)
+  } catch (e) {
+    return false
+  }
+})
+
 const activeType = ref<string>("Artwork")
 const images = ref<any[]>([])
 const loading = ref(false)
+const selectedInitialId = ref<string | null>(null)
+const imgRefs: any[] = []
+
+// When images change, try to scroll the initial image into view if present
+watch(images, async () => {
+  if (!selectedInitialId.value) return
+  await nextTick()
+  try {
+    const idx = images.value.findIndex((i: any) => String(i.ImgID || i.CouponID || i.ImgFull) === String(selectedInitialId.value))
+    if (idx >= 0 && imgRefs[idx]) {
+      const el = imgRefs[idx] as HTMLElement
+      el.scrollIntoView({ behavior: "smooth", block: "center" })
+    }
+  } catch (e) {}
+})
 
 const activeLabel = computed(() => {
   const t = types.find((x) => x.key === activeType.value)
@@ -106,6 +147,7 @@ async function loadImages(typeKey: string) {
       })
       const text = await res.text()
       images.value = JSON.parse(text || "[]")
+      console.log("Coupons loaded", images.value)
     } catch (e) {
       console.error("GetCoupons error", e)
       images.value = []
@@ -126,11 +168,60 @@ async function loadImages(typeKey: string) {
     const res = await fetch(appConfig.webAPIURL + "GetImages?" + params.toString())
     const text = await res.text()
     images.value = JSON.parse(text || "[]")
+    console.log("Images loaded", images.value)
   } catch (e) {
     console.error("GetImages error", e)
     images.value = []
   } finally {
     loading.value = false
+  }
+
+  // debug: log whether parent indicates a selection exists so UI shows Replace
+  try {
+    console.debug("[ImageManager] hasImageSelected prop:", Boolean((props as any).hasImageSelected))
+  } catch (e) {}
+
+  // Normalize: dedupe by ImgID/CouponID/ImgFull and mark Default images
+  try {
+    let normalized: any[] = []
+    const seen = new Set<string>()
+    let srcList: any = images.value || []
+    // If API returned a double-encoded JSON string, try to parse it
+    if (typeof srcList === "string") {
+      try {
+        srcList = JSON.parse(srcList)
+      } catch (e) {
+        console.debug("[ImageManager] images value is string and JSON.parse failed, falling back", srcList)
+      }
+    }
+    if (!Array.isArray(srcList)) {
+      // wrap single object into array for uniform processing
+      srcList = srcList ? [srcList] : []
+    }
+    for (let it of srcList) {
+      // If an entry is a JSON string, try to parse it
+      if (typeof it === "string") {
+        try {
+          it = JSON.parse(it)
+        } catch (e) {
+          // skip non-parseable strings
+          continue
+        }
+      }
+      if (!it || typeof it !== "object") continue
+      const key = String(it.ImgID ?? it.CouponID ?? it.ImgFull ?? it.CouponFull ?? (it.ImgThumb || ""))
+      if (!key) continue
+      if (seen.has(key)) continue
+      seen.add(key)
+      // mark default images (legacy default path contains '/Default/')
+      ;(it as any)._isDefault = String(it.ImgFull || it.CouponFull || "").includes("/Default/")
+      normalized.push(it)
+    }
+    images.value = normalized
+    console.debug("[ImageManager] Images loaded (normalized)", images.value)
+  } catch (e) {
+    // if normalization fails, leave images as-is
+    console.debug("[ImageManager] normalization failed", e)
   }
 }
 
@@ -140,7 +231,8 @@ function refresh() {
 
 function onSelect(img: any) {
   // Emit select-image with the full image url and id; EditorRoot will call canvas methods
-  const imgFull = img.ImgFull || img.CouponFull || img.ImgFullPath || img.ImgFull || img.CouponThumb
+  const raw = img.ImgFull || img.CouponFull || img.ImgFullPath || img.ImgThumb || img.CouponThumb || ""
+  const imgFull = makeFullUrl(raw)
   const id = img.ImgID || img.CouponID || (img.ImgPreText ? String(img.ImgPreText) + img.ImgID : img.ImgID)
   emit("select-image", { id, url: imgFull })
 }
@@ -150,7 +242,59 @@ function onEdit(img: any) {
   onSelect(img)
 }
 
+function onReplace(img: any) {
+  const raw = img.ImgFull || img.CouponFull || img.ImgFullPath || img.ImgThumb || img.CouponThumb || ""
+  const imgFull = makeFullUrl(raw)
+  const id = img.ImgID || img.CouponID || (img.ImgPreText ? String(img.ImgPreText) + img.ImgID : img.ImgID)
+  emit("replace-image", { id, url: imgFull, raw: img })
+}
+
+function onDownload(img: any) {
+  const raw = img.ImgFull || img.CouponFull || img.ImgThumb || img.CouponThumb || ""
+  const url = makeFullUrl(raw) || "#"
+  try {
+    window.open(url, "_blank")
+  } catch (e) {
+    // fallback: navigate
+    location.href = url
+  }
+}
+
+// Helper: convert relative or partial image paths into absolute URLs using appConfig
+function makeFullUrl(path: string | undefined | null) {
+  if (!path) return ""
+  const p = String(path || "").trim()
+  if (!p) return ""
+  // full http(s)
+  if (/^https?:\/\//i.test(p)) return p
+  // protocol-relative
+  if (/^\/\//.test(p)) return (typeof window !== "undefined" ? window.location.protocol : "https:") + p
+  // leading slash -> prefix with baseURL (which may include protocol)
+  const base = String(appConfig.baseURL || "")
+  if (p.startsWith("/")) {
+    if (base) return base.replace(/\/$/, "") + p
+    return p
+  }
+  // starts with ASRWebData or WebData-like -> prefix base
+  if (/^ASRWebData/i.test(p)) {
+    return base.replace(/\/$/, "") + "/" + p.replace(/^\/+/, "")
+  }
+  // otherwise assume relative to imgsURL or WebData
+  const imgs = String(appConfig.imgsURL || base)
+  return imgs.replace(/\/$/, "") + "/" + p.replace(/^\/+/, "")
+}
+
 // initial load
+if (props.initialImage) {
+  // best-effort: set initial selected id and try to pick appropriate type
+  selectedInitialId.value = props.initialImage?.id || props.initialImage?.ID || null
+  // if image has an ObjectGroup or known path, try to set type
+  const grp = (props.initialImage?.ObjectGroup || props.initialImage?.group || "").toString()
+  if (grp) {
+    const guess = types.find((t) => grp.toLowerCase().includes(t.key.toLowerCase()))
+    if (guess) activeType.value = guess.key
+  }
+}
 loadImages(activeType.value)
 </script>
 

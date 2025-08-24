@@ -1,5 +1,5 @@
 <template>
-  <div class="relative flex-1 flex flex-col items-center justify-center bg-white rounded shadow mt-4">
+  <div class="relative flex-1 flex flex-col items-center justify-center bg-white mt-4">
     <div id="canvasContainer" class="w-full h-full flex items-center justify-center">
       <canvas ref="canvasRef" id="e5Canvas" width="1620" height="900" class="border shadow"></canvas>
     </div>
@@ -491,7 +491,7 @@ function addText(value: string, textObjectId?: string, props?: any) {
   // Use legacy default text from old app
   let textboxValue = value
   if (!textboxValue || typeof textboxValue !== "string" || textboxValue.trim() === "") {
-    textboxValue = "Double click to edit this text."
+    textboxValue = "Click to edit this text."
   }
   // Legacy default properties
   // Legacy default properties (placement, size, etc.)
@@ -1255,6 +1255,23 @@ function setActiveTextEditing(id: string) {
   }
 }
 
+// Expose simple accessors for parent component
+function getActiveObject() {
+  try {
+    return canvas.value?.getActiveObject?.() ?? null
+  } catch (e) {
+    return null
+  }
+}
+
+function getActiveObjects() {
+  try {
+    return typeof canvas.value?.getActiveObjects === "function" ? canvas.value!.getActiveObjects() : []
+  } catch (e) {
+    return []
+  }
+}
+
 // Expose methods for parent (EditorRoot) to call
 
 defineExpose({
@@ -1263,6 +1280,7 @@ defineExpose({
   resetZoomTo100,
   addText,
   addImage,
+  replaceImage,
   addShape,
   addCoupon,
   updateText,
@@ -1271,6 +1289,8 @@ defineExpose({
   zoomFit,
   setActiveProp,
   getActiveProp,
+  getActiveObject,
+  getActiveObjects,
   removeActiveObject,
   bringForward,
   sendBackward,
