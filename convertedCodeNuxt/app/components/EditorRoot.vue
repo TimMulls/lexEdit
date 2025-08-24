@@ -53,14 +53,23 @@
                   <span class="flex items-center font-bold text-sm py-2"><Icon name="material-symbols:text-fields" class="mr-2 text-lg text-gray-500" />Text</span>
                 </template>
                 <div class="divide-y divide-gray-100">
-                  <div v-for="field in editorData.textFields.value || []" :key="field.label" class="flex items-center py-1.5 px-2.5">
+                  <div
+                    v-for="field in editorData.textFields.value || []"
+                    :key="field.id || field.ID || field.objectId || field.label"
+                    :class="[
+                      'flex items-center py-1.5 px-2.5 cursor-pointer',
+                      selectedObjectId && String(selectedObjectId) === String(field.id || field.ID || field.objectId || '') ? 'bg-primary-50 border-l-2 border-primary-400' : '',
+                    ]"
+                    @click="onSidebarFieldFocus(field)">
                     <Icon name="material-symbols:edit" class="mr-2 text-gray-400 text-base" />
                     <span class="text-xs font-medium text-gray-700 flex-1">{{ field.label }}</span>
                     <input
+                      :id="'sidebar_text_' + String(field.id || field.ID || field.objectId || '')"
                       v-model="field.value"
+                      ref="(el) => { /* ref will be used to focus when selected */ }"
                       class="ml-2 border border-gray-300 rounded px-1.5 py-0.5 text-xs w-28 focus:ring-2 focus:ring-primary-400"
                       @focus="onSidebarFieldFocus(field)"
-                      @click="onSidebarFieldFocus(field)" />
+                      @click.stop="onSidebarFieldFocus(field)" />
                   </div>
                 </div>
               </AccordionSection>
@@ -69,11 +78,37 @@
                   <span class="flex items-center font-bold text-sm py-2"><Icon name="material-symbols:image" class="mr-2 text-lg text-gray-500" />Image(s)</span>
                 </template>
                 <div class="divide-y divide-gray-100">
-                  <div v-for="img in editorData.images.value || []" :key="img.label" class="flex items-center py-1.5 px-2.5">
+                  <div
+                    v-for="img in editorData.images.value || []"
+                    :key="img.id || img.ID || img.objectId || img.label"
+                    :class="[
+                      'flex items-center py-1.5 px-2.5',
+                      selectedObjectId && String(selectedObjectId) === String(img.id || img.ID || img.objectId || img.ImgID || '') ? 'bg-primary-50' : '',
+                    ]">
                     <Icon name="material-symbols:image" class="mr-2 text-gray-400 text-base" />
-                    <img :src="img.thumb || img.url" class="w-16 h-10 object-cover rounded mr-2 border" @click="() => onSidebarImageClick(img)" />
-                    <span class="text-xs font-medium text-gray-700 flex-1" @click="() => onSidebarImageClick(img)">{{ img.label }}</span>
-                    <button class="ml-2 border border-gray-300 rounded px-2 py-0.5 text-xs bg-white hover:bg-gray-100 transition" @click="() => onSidebarChangeImage(img)">
+                    <img
+                      :src="img.thumb || img.url"
+                      :class="[
+                        'w-16 h-10 object-cover rounded mr-2 border',
+                        selectedObjectId && String(selectedObjectId) === String(img.id || img.ID || img.objectId || img.ImgID || '') ? 'ring-2 ring-primary-400' : '',
+                      ]"
+                      @click="
+                        (e) => {
+                          openAccordion = 1
+                          onSidebarImageClick(img)
+                        }
+                      " />
+                    <span
+                      class="text-xs font-medium text-gray-700 flex-1"
+                      @click="
+                        (e) => {
+                          openAccordion = 1
+                          onSidebarImageClick(img)
+                        }
+                      "
+                      >{{ img.label }}</span
+                    >
+                    <button class="ml-2 border border-gray-300 rounded px-2 py-0.5 text-xs bg-white hover:bg-gray-100 transition" @click="(e) => onSidebarChangeImage(img)">
                       Change Design
                     </button>
                   </div>
@@ -84,7 +119,7 @@
                   <span class="flex items-center font-bold text-sm py-2"><Icon name="material-symbols:confirmation-number" class="mr-2 text-lg text-gray-500" />Select Coupon</span>
                 </template>
                 <div class="divide-y divide-gray-100">
-                  <div v-for="coupon in editorData.coupons.value || []" :key="coupon.label" class="flex items-center py-1.5 px-2.5">
+                  <div v-for="coupon in editorData.coupons.value || []" :key="coupon.id || coupon.ID || coupon.objectId || coupon.label" class="flex items-center py-1.5 px-2.5">
                     <Icon name="material-symbols:confirmation-number" class="mr-2 text-gray-400 text-base" />
                     <span class="text-xs font-medium text-gray-700 flex-1">{{ coupon.label }}</span>
                   </div>
@@ -95,9 +130,15 @@
                   <span class="flex items-center font-bold text-sm py-2"><Icon name="material-symbols:category" class="mr-2 text-lg text-gray-500" />Shape(s)</span>
                 </template>
                 <div class="divide-y divide-gray-100">
-                  <div v-for="shape in editorData.shapes.value || []" :key="shape.label" class="flex items-center py-1.5 px-2.5">
+                  <div
+                    v-for="shape in editorData.shapes.value || []"
+                    :key="shape.id || shape.ID || shape.objectId || shape.label"
+                    :class="[
+                      'flex items-center py-1.5 px-2.5',
+                      selectedObjectId && String(selectedObjectId) === String(shape.id || shape.ID || shape.objectId || '') ? 'bg-primary-50' : '',
+                    ]">
                     <Icon name="material-symbols:category" class="mr-2 text-gray-400 text-base" />
-                    <span class="text-xs font-medium text-gray-700 flex-1" @click="() => onSidebarShapeClick(shape)">{{ shape.label }}</span>
+                    <span class="text-xs font-medium text-gray-700 flex-1 cursor-pointer" @click="(e) => onSidebarShapeClick(shape)">{{ shape.label }}</span>
                   </div>
                 </div>
               </AccordionSection>
@@ -256,6 +297,26 @@ const showImageManager = ref(false)
 const components = { ElementPropBar }
 const selectedLabel = ref<string | null>(null)
 const selectedObjectId = ref<string | undefined>(undefined)
+// Reentrancy guard: when we programmatically select on the canvas we temporarily suppress handling
+let _suppressCanvasSelectionEvents = false
+let _lastSelectionKey: string | null = null
+let _lastSelectionTs = 0
+
+function programmaticSelect(id: string) {
+  try {
+    _suppressCanvasSelectionEvents = true
+    if (canvasComponent.value && typeof canvasComponent.value.selectObjectByID === "function") {
+      canvasComponent.value.selectObjectByID(String(id))
+    }
+  } catch (e) {
+    console.error("programmaticSelect error", e)
+  } finally {
+    // clear suppression shortly after to allow real user events
+    setTimeout(() => {
+      _suppressCanvasSelectionEvents = false
+    }, 120)
+  }
+}
 import { reactive } from "vue"
 const selectedInitials = reactive({
   fontFamily: "Arial",
@@ -449,13 +510,21 @@ function onSidebarFieldFocus(field: any) {
   // When a text field in the sidebar is focused, select the corresponding canvas object by id
   const id = field.id || field.ID || field.objectId || null
   if (!id) return
-  if (canvasComponent.value && typeof canvasComponent.value.selectObjectByID === "function") {
-    canvasComponent.value.selectObjectByID(String(id))
-  }
-  // If the user wants to immediately edit text, attempt to enter text editing mode
-  if (canvasComponent.value && typeof canvasComponent.value.setActiveTextEditing === "function") {
-    canvasComponent.value.setActiveTextEditing(String(id))
-  }
+  openAccordion.value = 0
+  // Use programmaticSelect to avoid triggering the canvas-selection-changed handler loop
+  programmaticSelect(String(id))
+  // Focus the input element in the sidebar
+  nextTick(() => {
+    try {
+      const elId = "sidebar_text_" + String(id)
+      const el = document.getElementById(elId) as HTMLInputElement | null
+      if (el) {
+        el.focus()
+        const val = el.value || ""
+        el.setSelectionRange(val.length, val.length)
+      }
+    } catch (e) {}
+  })
 }
 
 // Watch text field changes and update canvas
@@ -475,6 +544,8 @@ watch(
 // Reload canvas helper
 async function reloadCanvasObjects() {
   if (!canvasComponent.value?.clearCanvas) return
+  // Suppress handling of selection events during full reload
+  _suppressCanvasSelectionEvents = true
   canvasComponent.value.clearCanvas()
   const faceMap = {
     FrontFace: "front",
@@ -522,14 +593,21 @@ async function reloadCanvasObjects() {
       // Initialize history baseline after objects loaded
       if (canvasComponent.value && typeof canvasComponent.value.initHistorySnapshot === "function") canvasComponent.value.initHistorySnapshot()
       if (canvasComponent.value && typeof canvasComponent.value.endHistorySuppress === "function") canvasComponent.value.endHistorySuppress()
+      // allow a short grace period for any selection events to settle before re-enabling handling
+      setTimeout(() => {
+        _suppressCanvasSelectionEvents = false
+      }, 200)
     })
   }
 }
 
 function onSidebarImageClick(img: any) {
   const id = img.id || img.ID || img.objectId || img.ID || img.ObjectId || img.ObjectID || null
-  if (!id) return
-  if (canvasComponent.value && typeof canvasComponent.value.selectObjectByID === "function") canvasComponent.value.selectObjectByID(String(id))
+  if (!id) {
+    console.debug("[EditorRoot] onSidebarImageClick: image has no id, cannot select", img)
+    return
+  }
+  programmaticSelect(String(id))
 }
 
 function onSidebarChangeImage(img: any) {
@@ -542,7 +620,7 @@ function onSidebarChangeImage(img: any) {
 function onSidebarShapeClick(shape: any) {
   const id = shape.id || shape.ID || shape.objectId || null
   if (!id) return
-  if (canvasComponent.value && typeof canvasComponent.value.selectObjectByID === "function") canvasComponent.value.selectObjectByID(String(id))
+  programmaticSelect(String(id))
 }
 
 // Reload when api finished loading or face changes
@@ -558,10 +636,91 @@ onMounted(async () => {
   reloadCanvasObjects()
   // Listen for selection events from canvas
   window.addEventListener("canvas-selection-changed", (ev: any) => {
+    if (_suppressCanvasSelectionEvents) {
+      // ignore events emitted as a result of our own programmatic selection
+      return
+    }
     const detail = ev instanceof CustomEvent ? ev.detail : null
-    if (detail && detail.label) {
-      selectedLabel.value = detail.label
-      selectedObjectId.value = detail.id
+    // Derive id either from event detail or from canvas active object to handle cases where canvas emits no id
+    let idRaw: any = null
+    let labelRaw: any = null
+    if (detail) {
+      idRaw = detail.id ?? null
+      labelRaw = detail.label ?? null
+    }
+    // Dedupe repeated identical selection events that can be emitted rapidly
+    try {
+      const key = `${String(idRaw || "")}::${String(labelRaw || "")}`
+      const now = Date.now()
+      if (_lastSelectionKey === key && now - _lastSelectionTs < 200) {
+        // ignore duplicate selection events within 200ms
+        return
+      }
+      _lastSelectionKey = key
+      _lastSelectionTs = now
+    } catch (e) {}
+    if ((!idRaw || idRaw === null) && canvasComponent.value && typeof canvasComponent.value.getActiveObject === "function") {
+      try {
+        const act: any = canvasComponent.value.getActiveObject()
+        if (act) {
+          idRaw = idRaw || act.id || act.ID || act.ImgID || act.objectId || act.ObjectID || null
+          labelRaw = labelRaw || act.ObjectName || act.label || (act.text && String(act.text).substring?.(0, 40)) || null
+
+          // EXTRA FALLBACK: if still no id, try to match the active object to sidebar data
+          // by URL or label. This covers custom images that didn't receive an ID property.
+          if (!idRaw) {
+            try {
+              const urlCandidate = act && (act.url || act.src || (act._element && act._element.currentSrc) || (act._element && act._element.src))
+              // images
+              if (urlCandidate) {
+                const imgMatch = (editorData.images.value || []).find((f: any) => {
+                  try {
+                    if (!f) return false
+                    const fUrl = f.url || f.thumb || f.src || f.imageUrl || null
+                    if (!fUrl) return false
+                    // exact match or endsWith (strip query strings)
+                    if (String(fUrl) === String(urlCandidate)) return true
+                    try {
+                      const aStr = fUrl ? String(fUrl) : ""
+                      const bStr = urlCandidate ? String(urlCandidate) : ""
+                      const cleanA = aStr.split("?")[0]
+                      const cleanB = bStr.split("?")[0]
+                      if (cleanA === cleanB) return true
+                      if (cleanA && cleanB && (cleanA.endsWith(cleanB) || cleanB.endsWith(cleanA))) return true
+                    } catch (e) {}
+                    return false
+                  } catch (e) {
+                    return false
+                  }
+                })
+                if (imgMatch) {
+                  idRaw = idRaw || imgMatch.id || imgMatch.ID || imgMatch.ImgID || imgMatch.objectId || imgMatch.ObjectID || null
+                  labelRaw = labelRaw || imgMatch.label || labelRaw
+                }
+              }
+            } catch (e) {}
+
+            // If still no id, try matching by label/text for text fields
+            if (!idRaw && labelRaw) {
+              try {
+                const textMatch = (editorData.textFields.value || []).find(
+                  (f: any) => String(f.label || f.ObjectName || f.Text || f.value || "").trim() === String(labelRaw).trim()
+                )
+                if (textMatch) {
+                  idRaw = idRaw || textMatch.id || textMatch.ID || textMatch.objectId || null
+                  labelRaw = labelRaw || textMatch.label
+                }
+              } catch (e) {}
+            }
+          }
+        }
+      } catch (e) {}
+    }
+
+    if (labelRaw) {
+      console.debug("[EditorRoot] canvas-selection-changed received", { idRaw, labelRaw })
+      selectedLabel.value = labelRaw
+      selectedObjectId.value = idRaw != null ? String(idRaw) : undefined
       // Query canvas for active object properties so menubar initializes correctly
       if (canvasComponent.value && typeof canvasComponent.value.getActiveProp === "function") {
         try {
@@ -602,12 +761,33 @@ onMounted(async () => {
       }
       // also open the appropriate sidebar accordion entry for this selected object
       try {
-        const idStr = String(detail.id || "")
-        if ((editorData.textFields.value || []).find((f: any) => String(f.id || f.ID || f.objectId || "") === idStr)) openAccordion.value = 0
-        else if ((editorData.images.value || []).find((f: any) => String(f.id || f.ID || f.objectId || "") === idStr)) openAccordion.value = 1
-        else if ((editorData.coupons.value || []).find((f: any) => String(f.id || f.ID || f.objectId || "") === idStr)) openAccordion.value = 2
-        else if ((editorData.shapes.value || []).find((f: any) => String(f.id || f.ID || f.objectId || "") === idStr)) openAccordion.value = 3
-      } catch (e) {}
+        const idStr = String(idRaw || "")
+        const textMatch = (editorData.textFields.value || []).find((f: any) => String(f.id || f.ID || f.objectId || "") === idStr)
+        const imgMatch = (editorData.images.value || []).find((f: any) => String(f.id || f.ID || f.objectId || f.ImgID || f.CouponID || "") === idStr)
+        const couponMatch = (editorData.coupons.value || []).find((f: any) => String(f.id || f.ID || f.objectId || "") === idStr)
+        const shapeMatch = (editorData.shapes.value || []).find((f: any) => String(f.id || f.ID || f.objectId || "") === idStr)
+        console.debug("[EditorRoot] selection matching results", { idStr, textMatch: !!textMatch, imgMatch: !!imgMatch, couponMatch: !!couponMatch, shapeMatch: !!shapeMatch })
+        if (textMatch) {
+          openAccordion.value = 0
+          // Focus the corresponding sidebar text input so user can type immediately
+          nextTick(() => {
+            try {
+              const elId = "sidebar_text_" + String(textMatch.id || textMatch.ID || textMatch.objectId || "")
+              const el = document.getElementById(elId) as HTMLInputElement | null
+              if (el) {
+                el.focus()
+                // place cursor at end
+                const val = el.value || ""
+                el.setSelectionRange(val.length, val.length)
+              }
+            } catch (e) {}
+          })
+        } else if (imgMatch) openAccordion.value = 1
+        else if (couponMatch) openAccordion.value = 2
+        else if (shapeMatch) openAccordion.value = 3
+      } catch (e) {
+        console.warn("selection handler failed", e)
+      }
     } else {
       selectedLabel.value = null
       selectedObjectId.value = undefined
@@ -626,7 +806,7 @@ onMounted(async () => {
       if (canvasComponent.value && typeof canvasComponent.value.selectObjectByID === "function") canvasComponent.value.selectObjectByID(id)
       return
     }
-    const imgMatch = (editorData.images.value || []).find((f: any) => String(f.id || f.ID || f.objectId || "") === id)
+    const imgMatch = (editorData.images.value || []).find((f: any) => String(f.id || f.ID || f.objectId || f.ImgID || f.CouponID || "") === id)
     if (imgMatch) {
       openAccordion.value = 1
       if (canvasComponent.value && typeof canvasComponent.value.selectObjectByID === "function") canvasComponent.value.selectObjectByID(id)

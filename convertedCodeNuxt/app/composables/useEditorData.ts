@@ -97,19 +97,27 @@ const images = computed(() => {
   return currentObjects.value
     .filter((obj: any) => obj.ResourceType === "I")
     .map((obj: any) => {
-      let url = appConfig.imgsURL
       const text = obj.Text || obj.text || ""
-      const group = obj.ObjectGroup || obj.objectGroup || ""
+      // base and groupPath will be computed below; use appConfig.imgsURL as base
+      const rawGroup = obj.ObjectGroup || obj.objectGroup || ""
+      let groupName = typeof rawGroup === "string" ? rawGroup.trim() : String(rawGroup || "")
+      if (groupName.toLowerCase() === "logo" || groupName.toLowerCase() === "logos") groupName = "logos"
+      groupName = groupName.replace(/^\/+|\/+$/g, "")
+      const base = typeof appConfig.imgsURL === "string" ? appConfig.imgsURL.replace(/\/+$/g, "") : ""
+      const groupPath = groupName ? `${groupName}/` : ""
+      let url = base
+      // Collapse duplicate slashes in the path portion but preserve protocol (https://)
+      // Use a regex that avoids collapsing the '//' after the scheme (e.g. 'https://')
       if (text === "") {
         if (obj.ObjectType == 124) {
-          url += (group ? group + "/" : "") + "Default/1.png"
+          url = `${base}/${groupPath}Default/1.png`.replace(/([^:]\/)\/+/g, "$1")
         } else {
-          url += (group ? group + "/" : "") + "M3/1.png?v=" + (appConfig.appVersion || "1")
+          url = `${base}/${groupPath}M3/1.png?v=${appConfig.appVersion || "1"}`.replace(/([^:]\/)\/+/g, "$1")
         }
       } else if (text === "[Offer area]" || text === "Click here to add Coupon One" || text === "Click here to add Coupon Two") {
-        url += (group ? group + "/" : "") + "M3/1.png?v=" + (appConfig.appVersion || "1")
+        url = `${base}/${groupPath}M3/1.png?v=${appConfig.appVersion || "1"}`.replace(/([^:]\/)\/+/g, "$1")
       } else {
-        url += (group ? group + "/" : "") + text.replace(/\\/g, "/") + ".png"
+        url = `${base}/${groupPath}${String(text).replace(/\\/g, "/")}.png`.replace(/([^:]\/)\/+/g, "$1")
       }
 
       // --- DEBUG/DEV URL REMAPPING LOGIC ---
@@ -139,6 +147,9 @@ const images = computed(() => {
         width: obj.Width ?? obj.width ?? 100,
         height: obj.Height ?? obj.height ?? 100,
         FillColor: obj.FontColor ?? obj.FillColor ?? obj.fillColor ?? obj.Color ?? obj.color ?? obj.fill ?? "#fff",
+        _groupName: groupName,
+        _baseUrl: base,
+        _groupPath: groupPath,
         ...obj,
       }
       console.log("[useEditorData] mapped image raw=", text, "final url=", url, "mapped=", mapped)

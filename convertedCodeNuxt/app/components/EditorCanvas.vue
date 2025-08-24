@@ -672,6 +672,12 @@ function addImage(url: string, props?: any) {
       recordPreState()
       // copy extra props onto group if provided
       Object.assign(group, fabricProps)
+      try {
+        // normalize id fields so sidebar matching works
+        const normalizedId = fabricProps.ImgID || fabricProps.ID || fabricProps.id || fabricProps.objectId || null
+        if (normalizedId && !group.id) group.id = String(normalizedId)
+        if (fabricProps.ImgID && !group.ImgID) group.ImgID = fabricProps.ImgID
+      } catch (e) {}
       canvas.value!.add(group)
       // apply edit mode locks to newly added object(s)
       try {
@@ -695,6 +701,12 @@ function addImage(url: string, props?: any) {
         if (height) setProps.height = height
         img.set(setProps)
         recordPreState()
+        try {
+          // normalize id on fallback image too
+          const normalizedId = fabricProps.ImgID || fabricProps.ID || fabricProps.id || fabricProps.objectId || null
+          if (normalizedId && !img.id) img.id = String(normalizedId)
+          if (fabricProps.ImgID && !img.ImgID) img.ImgID = fabricProps.ImgID
+        } catch (e) {}
         canvas.value!.add(img)
         try {
           if (typeof setEditMode === "function") setEditMode(editorData.advMode.value)
@@ -733,6 +745,16 @@ function addShape(type: string, props?: any) {
   // Add more shape types as needed
   if (shape) {
     recordPreState()
+    // Normalize canonical id fields so sidebar/canvas matching works for shapes
+    try {
+      const normalizedId = props?.ID || props?.id || props?.objectId || props?.ObjectID || null
+      if (normalizedId && !(shape as any).id) (shape as any).id = String(normalizedId)
+      if (props?.ID && !(shape as any).ID) (shape as any).ID = props.ID
+      if (props?.objectId && !(shape as any).objectId) (shape as any).objectId = props.objectId
+      if (props?.ObjectID && !(shape as any).ObjectID) (shape as any).ObjectID = props.ObjectID
+      // Set a label for debugging/menus
+      if ((props?.label || props?.ObjectName) && !(shape as any).label) (shape as any).label = props.label || props.ObjectName
+    } catch (e) {}
     canvas.value.add(shape)
     try {
       if (typeof setEditMode === "function") setEditMode(editorData.advMode.value)
@@ -757,7 +779,15 @@ function addCoupon(code: string, props?: any) {
 
 function updateText(id: string, value: string) {
   if (!canvas.value) return
-  const obj = canvas.value.getObjects().find((o: any) => o.type === "textbox" && o.id === id)
+  const obj = canvas.value.getObjects().find((o: any) => {
+    try {
+      if (o.type !== "textbox") return false
+      const candidates = [o.id, o.ID, o.textObjectId, o.textObjectID, o.objectId]
+      return candidates.some((c: any) => c !== undefined && c !== null && String(c) === String(id))
+    } catch (e) {
+      return false
+    }
+  })
   if (obj) {
     obj.set("text", value)
     canvas.value.requestRenderAll()
@@ -782,25 +812,169 @@ onMounted(() => {
     // Attach the fabric canvas instance to the composable's ref
     const inst = new Canvas(canvasRef.value, {
       backgroundColor: "#fff",
-      selection: false,
+      // Allow single-click selection so UI can respond (sidebar open/highlight) even when not in advanced edit mode
+      selection: true,
       preserveObjectStacking: true,
       renderOnAddRemove: true,
     })
     canvas.value = inst // ensure composable and local ref are the same
+    console.debug("[EditorCanvas] Fabric canvas initialized", { timestamp: Date.now() })
     // Wire selection events to notify parent/UI
     try {
       inst.on("selection:created", (e: any) => {
         const obj = e.selected && e.selected.length === 1 ? e.selected[0] : e.target
-        const label = obj && (obj.ObjectName || obj.label || (obj.text && obj.text.substring?.(0, 20)))
-        window.dispatchEvent(new CustomEvent("canvas-selection-changed", { detail: { id: obj?.id || obj?.ID || null, label } }))
+        let label = obj && (obj.ObjectName || obj.label || (obj.text && obj.text.substring?.(0, 20)))
+        let idCandidate = obj?.id || obj?.ID || obj?.ImgID || obj?.ImgId || obj?.objectId || obj?.ObjectID || obj?.textObjectId || obj?.textObjectID || obj?.name || null
+        // Add diagnostic dump of object so we can inspect runtime properties in the browser console
+        try {
+          console.debug("[EditorCanvas] selection raw object", { obj, ctor: obj?.constructor?.name, type: obj?.type, keys: Object.keys(obj || {}) })
+        } catch (e) {}
+        // If the clicked element is an inner image inside a group, fallback to the group's id/ImgID
+        if (!idCandidate) {
+          try {
+            const parent = (obj as any).group || (obj as any).parent || null
+            if (parent) {
+              idCandidate = parent.id || parent.ID || parent.ImgID || parent.ImgId || parent.objectId || parent.ObjectID || null
+              console.debug("[EditorCanvas] selection:created parent fallback", { parentId: idCandidate, parentType: parent?.type, parentKeys: Object.keys(parent || {}) })
+            }
+            // If still no id, search canvas top-level objects to find a group that contains this object
+            if (!idCandidate && canvas.value) {
+              try {
+                const objs = canvas.value.getObjects()
+                for (const candidate of objs) {
+                  try {
+                    const $c: any = candidate
+                    const children = $c.getObjects ? $c.getObjects() : $c._objects || null
+                    // direct containment
+                    if (children && Array.isArray(children) && children.includes(obj)) {
+                      idCandidate = $c.id || $c.ID || $c.ImgID || $c.ImgId || $c.objectId || $c.ObjectID || $c.textObjectId || $c.textObjectID || $c.name || null
+                      console.debug("[EditorCanvas] selection:created group search fallback", { foundOn: $c, foundId: idCandidate })
+                      if (idCandidate) break
+                    }
+                    // direct reference equality (object itself is top-level)
+                    if ($c === obj) {
+                      idCandidate = $c.id || $c.ID || $c.ImgID || $c.ImgId || $c.objectId || $c.ObjectID || $c.textObjectId || $c.textObjectID || $c.name || null
+                      if (idCandidate) break
+                    }
+                    // element identity (useful for custom-rendered images)
+                    if ($c._element && obj && obj._element && $c._element === obj._element) {
+                      idCandidate = $c.id || $c.ID || $c.ImgID || $c.ImgId || $c.objectId || $c.ObjectID || $c.textObjectId || $c.textObjectID || $c.name || null
+                      if (idCandidate) break
+                    }
+                  } catch (ee) {}
+                }
+              } catch (eee) {}
+            }
+          } catch (e) {}
+        }
+        // Extra fallback: if we still don't have an idCandidate, try matching the clicked
+        // object against the editor data images by URL or label. This handles custom
+        // images that never received an id property when added.
+        if (!idCandidate) {
+          try {
+            const urlCandidate = obj && (obj.url || obj.src || (obj._element && (obj._element.currentSrc || obj._element.src)) || null)
+            const labelCandidate = obj && (obj.ObjectName || obj.label || (obj.text && obj.text.substring?.(0, 40)))
+            if (urlCandidate || labelCandidate) {
+              const imgs = editorData.images.value || []
+              for (const f of imgs) {
+                try {
+                  const fUrl = f.url || f.thumb || f.src || f.imageUrl || null
+                  const fLabel = f.label || f.ObjectName || f.name || null
+                  if (urlCandidate && fUrl) {
+                    const a = fUrl ? String(fUrl).split("?")[0] : ""
+                    const b = urlCandidate ? String(urlCandidate).split("?")[0] : ""
+                    if (a && b && (a === b || a.endsWith(b) || b.endsWith(a))) {
+                      idCandidate = f.id || f.ID || f.ImgID || f.objectId || f.ObjectID || null
+                      label = label || f.label || labelCandidate
+                      break
+                    }
+                  }
+                  if (!idCandidate && labelCandidate && fLabel && String(fLabel).trim() === String(labelCandidate).trim()) {
+                    idCandidate = f.id || f.ID || f.ImgID || f.objectId || f.ObjectID || null
+                    label = label || f.label || labelCandidate
+                    break
+                  }
+                } catch (ee) {}
+              }
+            }
+          } catch (ee) {}
+        }
+        console.debug("[EditorCanvas] selection:created", { id: idCandidate, label })
+        window.dispatchEvent(new CustomEvent("canvas-selection-changed", { detail: { id: idCandidate, label } }))
       })
       inst.on("selection:cleared", (e: any) => {
+        console.debug("[EditorCanvas] selection:cleared")
         window.dispatchEvent(new CustomEvent("canvas-selection-changed", { detail: null }))
       })
       inst.on("selection:updated", (e: any) => {
         const obj = e.selected && e.selected.length === 1 ? e.selected[0] : e.target
-        const label = obj && (obj.ObjectName || obj.label || (obj.text && obj.text.substring?.(0, 20)))
-        window.dispatchEvent(new CustomEvent("canvas-selection-changed", { detail: { id: obj?.id || obj?.ID || null, label } }))
+        let label = obj && (obj.ObjectName || obj.label || (obj.text && obj.text.substring?.(0, 20)))
+        let idCandidate = obj?.id || obj?.ID || obj?.ImgID || obj?.ImgId || obj?.objectId || obj?.ObjectID || obj?.textObjectId || obj?.textObjectID || obj?.name || null
+        if (!idCandidate) {
+          try {
+            const parent = (obj as any).group || (obj as any).parent || null
+            if (parent) {
+              idCandidate = parent.id || parent.ID || parent.ImgID || parent.ImgId || parent.objectId || parent.ObjectID || null
+              console.debug("[EditorCanvas] selection:updated parent fallback", { parentId: idCandidate, parentType: parent?.type })
+            }
+            // additional fallback: search top-level objects by reference/element
+            if (!idCandidate && canvas.value) {
+              try {
+                const objs = canvas.value.getObjects()
+                for (const candidate of objs) {
+                  try {
+                    const $c: any = candidate
+                    const children = $c.getObjects ? $c.getObjects() : $c._objects || null
+                    if (children && Array.isArray(children) && children.includes(obj)) {
+                      idCandidate = $c.id || $c.ID || $c.ImgID || $c.ImgId || $c.objectId || $c.ObjectID || $c.textObjectId || $c.textObjectID || $c.name || null
+                      if (idCandidate) break
+                    }
+                    if ($c === obj) {
+                      idCandidate = $c.id || $c.ID || $c.ImgID || $c.ImgId || $c.objectId || $c.ObjectID || $c.textObjectId || $c.textObjectID || $c.name || null
+                      if (idCandidate) break
+                    }
+                    if ($c._element && obj && obj._element && $c._element === obj._element) {
+                      idCandidate = $c.id || $c.ID || $c.ImgID || $c.ImgId || $c.objectId || $c.ObjectID || $c.textObjectId || $c.textObjectID || $c.name || null
+                      if (idCandidate) break
+                    }
+                  } catch (ee) {}
+                }
+              } catch (eee) {}
+            }
+            // Extra fallback: if still no idCandidate, try matching active object against editorData images by URL or label
+            if (!idCandidate) {
+              try {
+                const urlCandidate = obj && (obj.url || obj.src || (obj._element && (obj._element.currentSrc || obj._element.src)) || null)
+                const labelCandidate = obj && (obj.ObjectName || obj.label || (obj.text && obj.text.substring?.(0, 40)))
+                if (urlCandidate || labelCandidate) {
+                  const imgs = editorData.images.value || []
+                  for (const f of imgs) {
+                    try {
+                      const fUrl = f.url || f.thumb || f.src || f.imageUrl || null
+                      const fLabel = f.label || f.ObjectName || f.name || null
+                      if (urlCandidate && fUrl) {
+                        const a = fUrl ? String(fUrl).split("?")[0] : ""
+                        const b = urlCandidate ? String(urlCandidate).split("?")[0] : ""
+                        if (a && b && (a === b || a.endsWith(b) || b.endsWith(a))) {
+                          idCandidate = f.id || f.ID || f.ImgID || f.objectId || f.ObjectID || null
+                          label = label || f.label || labelCandidate
+                          break
+                        }
+                      }
+                      if (!idCandidate && labelCandidate && fLabel && String(fLabel).trim() === String(labelCandidate).trim()) {
+                        idCandidate = f.id || f.ID || f.ImgID || f.objectId || f.ObjectID || null
+                        label = label || f.label || labelCandidate
+                        break
+                      }
+                    } catch (ee) {}
+                  }
+                }
+              } catch (ee) {}
+            }
+          } catch (e) {}
+        }
+        console.debug("[EditorCanvas] selection:updated", { id: idCandidate, label })
+        window.dispatchEvent(new CustomEvent("canvas-selection-changed", { detail: { id: idCandidate, label } }))
       })
       // Track object transform lifecycle so we record history only for real changes
       inst.on("object:scaling", (e: any) => {
@@ -829,6 +1003,28 @@ onMounted(() => {
         try {
           const o = e.target
           configureObject(o)
+          // Propagate canonical id-like fields from container/group to immediate children.
+          // This ensures clicks on inner child objects will still yield the parent's ID
+          // which the sidebar expects (legacy app used group-level IDs).
+          try {
+            const propagateKeys = ["id", "ID", "ImgID", "ImgId", "objectId", "ObjectID", "textObjectId", "textObjectID"]
+            const getChildren = (obj: any) => (obj && typeof obj.getObjects === "function" ? obj.getObjects() : obj && obj._objects ? obj._objects : null)
+            const children = getChildren(o)
+            if (children && Array.isArray(children) && children.length > 0) {
+              for (const child of children) {
+                try {
+                  for (const k of propagateKeys) {
+                    try {
+                      if ((o as any)[k] !== undefined && (o as any)[k] !== null && ((child as any)[k] === undefined || (child as any)[k] === null)) {
+                        ;(child as any)[k] = (o as any)[k]
+                      }
+                    } catch (ee) {}
+                  }
+                  if (typeof child.setCoords === "function") child.setCoords()
+                } catch (ee) {}
+              }
+            }
+          } catch (ee) {}
         } catch (e) {}
       })
     } catch (e) {
@@ -999,13 +1195,25 @@ function setEditMode(mode: boolean) {
 function findObjectById(id: string) {
   if (!canvas.value) return null
   const objs = canvas.value.getObjects()
-  return (
-    objs.find((o: any) => {
-      if (!o) return false
-      const candidates = [o.id, o.ID, o.textObjectId, o.textObjectID, o.name]
-      return candidates.some((c) => c !== undefined && c !== null && String(c) === String(id))
-    }) || null
-  )
+  // Search top-level objects and, if necessary, their children (groups)
+  for (const o of objs) {
+    if (!o) continue
+    const $o: any = o
+    const candidates = [$o.id, $o.ID, $o.ImgID, $o.ImgId, $o.textObjectId, $o.textObjectID, $o.objectId, $o.ObjectID, $o.name]
+    if (candidates.some((c) => c !== undefined && c !== null && String(c) === String(id))) return o
+    // If the object is a group, check its elements
+    try {
+      const children = $o.getObjects ? $o.getObjects() : null
+      if (children && Array.isArray(children)) {
+        for (const c of children) {
+          const $c: any = c
+          const ccands = [$c.id, $c.ID, $c.ImgID, $c.ImgId, $c.textObjectId, $c.textObjectID, $c.objectId, $c.ObjectID, $c.name]
+          if (ccands.some((x) => x !== undefined && x !== null && String(x) === String(id))) return o
+        }
+      }
+    } catch (e) {}
+  }
+  return null
 }
 
 function selectObjectByID(id: string) {
@@ -1016,7 +1224,8 @@ function selectObjectByID(id: string) {
     canvas.value.setActiveObject(obj)
     canvas.value.requestRenderAll()
     const label = (obj as any).ObjectName || (obj as any).label || obj.type || ((obj as any).text ? String((obj as any).text).slice(0, 40) : "Object")
-    window.dispatchEvent(new CustomEvent("canvas-selection-changed", { detail: { id: id, label } }))
+    const emittedId = (obj as any).id || (obj as any).ID || (obj as any).ImgID || id
+    window.dispatchEvent(new CustomEvent("canvas-selection-changed", { detail: { id: emittedId, label } }))
   } catch (e) {
     console.warn("selectObjectByID failed", e)
   }
