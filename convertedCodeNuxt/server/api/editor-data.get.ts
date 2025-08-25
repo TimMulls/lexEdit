@@ -2,8 +2,7 @@
 import { defineEventHandler } from "h3"
 
 export default defineEventHandler(async () => {
-  const url = "https://agentzmarketing.com//DesktopModules/EditorServices/API/LexEditor/GetOrderData?orderNumber=292879&userId=0&sessionId=1axrn53oagwmqvxdwi1la5cy"
-
+  const url = "https://agentzmarketing.com/DesktopModules/EditorServices/API/LexEditor/GetOrderData?orderNumber=292997&userId=42707&sessionId=0p1aaztugihxl41eqw1uomry"
   const res = await fetch(url)
   if (!res.ok) {
     // return a simple error object to make failures visible in dev

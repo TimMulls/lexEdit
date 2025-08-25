@@ -63,6 +63,11 @@ class LexAppConfig {
     this.ImageClassType = "img"
     this.AutoSaveDuration = 30
     this.extraKeys = [
+      // Canonical image metadata keys preserved for legacy SaveData (ensure serializer includes them)
+      "ImgFull",
+      "imgFull",
+      "originalSrc",
+      "_origSrc",
       "imgType",
       "ID",
       "LinkedObject",

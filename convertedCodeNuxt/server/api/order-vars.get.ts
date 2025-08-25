@@ -4,7 +4,7 @@ import { promises as fs } from "fs"
 import { join } from "path"
 
 const REMOTE_ORDERVARS_URL =
-  "https://agentzmarketing.com/DesktopModules/EditorServices/API/LexEditor/GetOrderVars?enc=xp9zJWGBb99iuvodeRz03xKygs9jN3p2rzaY6Mu2FGCqQIS0iyLkG97B%2BZFf4SqVDigmnBdgJWX1j77jabFuUzMDKPymTM0XoZ9lNXieYTqYCqwSUiXcpQ1MzFM774xYpJvDEl1X1ZYo24ICNbaYTtH1FppVpc3TRwLXxYh77vPusnKHqy0UXUaOn%2FxqqIo1ss4lODmeplxmc2uDOjNWPg%3D%3D"
+  "https://agentzmarketing.com/DesktopModules/EditorServices/API/LexEditor/GetOrderVars?enc=XHhYkOnSI7WlzGBavHi%2FJk2UaPBnVzwPdY%2BNOf69sqYMt3cwMiSIVra6s%2Fxqmbj03sIzC8EHVhZtOIEXE9xqkB%2FXE8YOwGfZrTIt%2Bod%2BCTdhiJA6Wz2DFppIGgwidDGfygQjUKgmLiw1E4b7pFJl%2Fp5sKMBpNqWCogP9x3dWytrOdSkLguTOAJnx0LVi7pZ69wEtEsdpcOtyBR0O0aBw6Q%3D%3D"
 
 const CACHE_DIR = join(process.cwd(), "server", ".cache")
 const CACHE_FILE = join(CACHE_DIR, "order-vars.json")

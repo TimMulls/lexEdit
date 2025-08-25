@@ -50,7 +50,7 @@
               <button v-if="(img as any)._isDefault" class="text-xs px-2 py-0.5 border rounded" @click="onDownload(img)">Download</button>
 
               <!-- Main action: Replace when canvas has selection, otherwise Add -->
-              <button v-if="showReplace" class="text-xs px-2 py-0.5 border rounded bg-yellow-50" @click="onReplace(img)">Replace</button>
+              <button v-if="showReplaceRef" class="text-xs px-2 py-0.5 border rounded bg-yellow-50" @click="onReplace(img)">Replace</button>
               <button v-else class="text-xs px-2 py-0.5 border rounded" @click="onSelect(img)">{{ selectLabel(img) }}</button>
 
               <button v-if="canEdit(img)" class="text-xs px-2 py-0.5 border rounded" @click="onEdit(img)">Edit</button>
@@ -59,8 +59,35 @@
         </div>
       </div>
     </div>
-    <div class="w-12 border-l flex items-center justify-center">
-      <button class="p-2" @click="$emit('close')">✕</button>
+    <div class="w-44 border-l p-2 bg-gray-50">
+      <div class="text-sm font-medium mb-2">Size & Shape</div>
+      <div class="space-y-2">
+        <div class="flex items-center gap-2">
+          <button class="text-xs px-2 py-1 border rounded" @click.prevent="setPreset(50)">Small</button>
+          <button class="text-xs px-2 py-1 border rounded" @click.prevent="setPreset(75)">Medium</button>
+          <button class="text-xs px-2 py-1 border rounded" @click.prevent="setPreset(100)">Large</button>
+        </div>
+
+        <div class="flex items-center gap-2">
+          <label class="text-xs">Scale %</label>
+          <input type="number" min="10" max="200" v-model.number="sizePct" class="w-16 text-sm px-2 py-1 border rounded" />
+        </div>
+
+        <div>
+          <label class="text-xs">Shape</label>
+          <select v-model="shape" class="w-full text-sm px-2 py-1 border rounded">
+            <option value="fit">Fit</option>
+            <option value="crop">Crop</option>
+            <option value="circle">Circle</option>
+            <option value="stretch">Stretch</option>
+          </select>
+        </div>
+
+        <div class="flex items-center justify-between">
+          <button class="text-xs px-2 py-1 border rounded" @click="$emit('close')">Close</button>
+          <div class="text-xs text-gray-500">Preview scale: {{ sizePct }}%</div>
+        </div>
+      </div>
     </div>
   </div>
 </template>
@@ -87,13 +114,30 @@ const orderVars = useOrderVars()
 
 const props = defineProps<{ initialImage?: any; hasImageSelected?: boolean }>()
 
-const showReplace = computed(() => {
-  try {
-    return !!(props && (props as any).hasImageSelected)
-  } catch (e) {
-    return false
+// size/shape controls
+const sizePct = ref<number>(75)
+const shape = ref<string>("fit")
+function setPreset(pct: number) {
+  sizePct.value = pct
+}
+
+// reactive boolean copied from prop to avoid timing issues when loading images
+const showReplaceRef = ref<boolean>(false)
+try {
+  showReplaceRef.value = !!(props && (props as any).hasImageSelected)
+} catch (e) {
+  showReplaceRef.value = false
+}
+watch(
+  () => (props as any).hasImageSelected,
+  (v) => {
+    try {
+      showReplaceRef.value = !!v
+    } catch (e) {
+      showReplaceRef.value = false
+    }
   }
-})
+)
 
 const activeType = ref<string>("Artwork")
 const images = ref<any[]>([])
@@ -159,12 +203,14 @@ async function loadImages(typeKey: string) {
 
   // Generic images endpoint
   try {
+    console.log("[ImageManager] orderVars:", JSON.parse(JSON.stringify(orderVars)))
     const params = new URLSearchParams({
       imgType: String(typeKey || ""),
       userId: String(orderVars.userId ?? ""),
       sessionId: String(orderVars.sessionId ?? ""),
       productId: String(orderVars.frontTemplateID ?? 0),
     })
+    console.log("Loading images with params", params.toString())
     const res = await fetch(appConfig.webAPIURL + "GetImages?" + params.toString())
     const text = await res.text()
     images.value = JSON.parse(text || "[]")
@@ -234,7 +280,7 @@ function onSelect(img: any) {
   const raw = img.ImgFull || img.CouponFull || img.ImgFullPath || img.ImgThumb || img.CouponThumb || ""
   const imgFull = makeFullUrl(raw)
   const id = img.ImgID || img.CouponID || (img.ImgPreText ? String(img.ImgPreText) + img.ImgID : img.ImgID)
-  emit("select-image", { id, url: imgFull })
+  emit("select-image", { id, url: imgFull, options: { sizePct: sizePct.value, shape: shape.value } })
 }
 
 function onEdit(img: any) {
@@ -246,7 +292,7 @@ function onReplace(img: any) {
   const raw = img.ImgFull || img.CouponFull || img.ImgFullPath || img.ImgThumb || img.CouponThumb || ""
   const imgFull = makeFullUrl(raw)
   const id = img.ImgID || img.CouponID || (img.ImgPreText ? String(img.ImgPreText) + img.ImgID : img.ImgID)
-  emit("replace-image", { id, url: imgFull, raw: img })
+  emit("replace-image", { id, url: imgFull, raw: img, options: { sizePct: sizePct.value, shape: shape.value } })
 }
 
 function onDownload(img: any) {
